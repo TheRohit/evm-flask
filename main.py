@@ -1,35 +1,42 @@
-# Import necessary modules at the top
-import cv2
-import sys
-from video_processing import pyramids, heartrate, preprocessing, eulerian
+from flask import Flask, request, jsonify
+from werkzeug.utils import secure_filename
+import os
+from app import process_video  # Make sure to import your processing function
 
+app = Flask(__name__)
 
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-def process_video(video_path):
-    freq_min = 1
-    freq_max = 1.8
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
-    print("Reading + preprocessing video...")
-    video_frames, frame_ct, fps = preprocessing.read_video(video_path)
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-    print("Building Laplacian video pyramid...")
-    lap_video = pyramids.build_video_pyramid(video_frames)
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+        
+        # Process the uploaded video file
+        heart_rate = process_video(file_path)
+        
+        # Cleanup or handle the video file as needed
+        
+        return jsonify({'heart_rate': heart_rate})
 
-    heart_rate = None  # Initialize heart rate variable
+    return jsonify({'error': 'Invalid file type'}), 400
 
-    for i, video in enumerate(lap_video):
-        if i == 0 or i == len(lap_video)-1:
-            continue
+if __name__ == "__main__":
 
-        print("Running FFT and Eulerian magnification...")
-        result, fft, frequencies = eulerian.fft_filter(video, freq_min, freq_max, fps)
-        lap_video[i] += result
-
-        print("Calculating heart rate...")
-        heart_rate = heartrate.find_heart_rate(fft, frequencies, freq_min, freq_max)
-
-    print("Rebuilding final video...")
-    amplified_frames = pyramids.collapse_laplacian_video_pyramid(lap_video, frame_ct)
-
-    print("Heart rate: ", heart_rate)
-    return heart_rate
+    port = int(os.getenv('PORT', 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
