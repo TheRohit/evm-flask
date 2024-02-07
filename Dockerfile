@@ -6,6 +6,6 @@ COPY . .
 EXPOSE 5000
 ENV FLASK_APP=main.py
 
-CMD ["gunicorn", "-b", ":5000", "main:app"]
+CMD ["gunicorn", "--timeout", "300", "-b", ":5000", "main:app"]
 
 RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y
