@@ -1,9 +1,20 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, abort
 from werkzeug.utils import secure_filename
+from functools import wraps
 import os
 from app import process_video  # Make sure to import your processing function
 
 app = Flask(__name__)
+
+def require_api_key(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('X-API-KEY')
+        if api_key and api_key == os.getenv('API_KEY'):
+            return f(*args, **kwargs)
+        else:
+            abort(401, description="Invalid or missing API Key")
+    return decorated_function
 
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov'}
@@ -16,6 +27,7 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/upload', methods=['POST'])
+@require_api_key
 def upload_file():
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
